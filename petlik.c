@@ -1,345 +1,516 @@
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 
-typedef struct zmienna {
-	int *wartosc;
-	int dlugosc_calkowita;
-	int dlugosc;
-} zmienna;
-int rozmiar_pocz = 200;
+#define LETTERS_NUMBER 26
 
-/*
-Inicjalizacja tablic, jednej występującej w strukturze zmienna,
-drugiej do przechowywania znaków
-*/
-void init(zmienna *x) {
-	x->wartosc = (int *) malloc(sizeof(int) * (long unsigned int) rozmiar_pocz);
-	x->dlugosc_calkowita = rozmiar_pocz;
-	x->dlugosc = 1;
-	for (int i = 0; i < rozmiar_pocz; i++) {
-		x->wartosc[i] = 0;
-	}
+struct SuperLetter {
+    int *value;
+    size_t occupied_space;
+    size_t free_space;
+};
+
+struct SuperAlphabet {
+    struct SuperLetter letters[LETTERS_NUMBER];
+};
+
+void init_letter(struct SuperLetter *superLetter) {
+    superLetter->value = calloc(16, sizeof(int));
+    superLetter->occupied_space = 1;
+    superLetter->free_space = 16;
 }
 
-void init_2(char **T, int *dlugosc, int *dlugosc_calkowita) {
-	*dlugosc_calkowita = 64;
-	*T = (char *) malloc(sizeof(char) * (long unsigned int) *dlugosc_calkowita);
-	*dlugosc = 1;
+struct SuperAlphabet *init_alphabet() {
+    struct SuperAlphabet *new_alphabet = malloc(sizeof(struct SuperAlphabet));
+    for (int i = 0; i < LETTERS_NUMBER; i++) {
+        init_letter(&new_alphabet->letters[i]);
+    }
+    return new_alphabet;
 }
 
-void uninit(zmienna x) {
-	free(x.wartosc);
+void free_alphabet(struct SuperAlphabet *alphabet) {
+    for (int i = 0; i < LETTERS_NUMBER; i++) {
+        free(alphabet->letters[i].value);
+    }
+    free(alphabet);
 }
 
-void dopisz_na_koniec(zmienna *x) {
-	if (x->dlugosc == x->dlugosc_calkowita) {
-		int nowa_dlugosc = 2 * (x->dlugosc_calkowita);
-		x->wartosc = (int *) realloc(x->wartosc, sizeof(int) *
-		                                         (long unsigned int) nowa_dlugosc);
-		x->dlugosc_calkowita = nowa_dlugosc;
 
-	}
-	x->wartosc[x->dlugosc] = 1;
-	(x->dlugosc)++;
-
-	for (int j = x->dlugosc; j < x->dlugosc_calkowita; j++) {
-		(x->wartosc[j]) = 0;
-
-	}
+void print(const char *message, const char *message2, const int length) {
+    printf("%s: %.*s\n", message, length, message2);
 }
 
-//POWIEKSZENIE TABLICY DWUKROTNIE
-void
-zwieksz_rozmiar(char **T, const int *ile_zajetych, int *rozmiar_prawdziwy) {
-	if (*ile_zajetych == *rozmiar_prawdziwy) {
-
-		int rozmiar_nowy = 2 * (*rozmiar_prawdziwy);
-		*T = realloc(*T,
-		                      sizeof(char) * (long unsigned int) rozmiar_nowy);
-		*rozmiar_prawdziwy = rozmiar_nowy;
-	}
+bool is_alphabetic(char c) {
+    return c >= 'a' && c <= 'z';
 }
 
-//POWIEKSZENIE TABLICY X DO TAKIEJ SAMEJ ILOSCI KOMOREK CO W TABLICY Y
-void zmien_rozmiar(zmienna *x, zmienna *y) {
-	(x->wartosc) = (int *) realloc((x->wartosc), sizeof(int) *
-	                                             (long unsigned int) (y->dlugosc_calkowita));
+enum InstructionType {
+    INC,
+    ADD,
+    CLR,
+    JMP,
+    DJZ,
+    HLT,
+    PRT
+};
 
-	(x->dlugosc_calkowita) = (y->dlugosc_calkowita);
+struct Instruction {
+    enum InstructionType instrType;
+    int first_arg;
+    int second_arg;
+};
 
-	for (int j = x->dlugosc; j < x->dlugosc_calkowita; j++) {
-		(x->wartosc[j]) = 0;
-	}
+struct InstrContainer {
+    struct Instruction *instructions;
+    size_t occupied_space;
+    size_t all_space;
+};
+
+struct InstrContainer *init_container() {
+    struct InstrContainer *container = malloc(sizeof(struct InstrContainer));
+    container->instructions = malloc(16 * sizeof(struct Instruction));
+    container->occupied_space = 0;
+    container->all_space = 16;
+    return container;
 }
 
-//GŁÓWNA FUNKCJA DO WYRÓWNYWANA ELEMENTÓW TABLICY NA CYFRY ZMIENNEJ
-void optymalizuj(zmienna *x) {
-
-	for (int i = 0; i < x->dlugosc - 1; i++) {
-		if ((x->wartosc[i]) > 9999) {
-			(x->wartosc[i + 1]) += ((x->wartosc[i]) / 10000);
-			(x->wartosc[i]) %= 10000;
-		}
-
-	}
-	if (x->wartosc[(x->dlugosc_calkowita) - 1] > 9999) {
-		x->wartosc[x->dlugosc_calkowita - 1] -= 10000;
-		dopisz_na_koniec(x);
-	} else if (x->wartosc[x->dlugosc - 1] > 9999) {
-		x->wartosc[x->dlugosc - 1] -= 10000;
-		(x->wartosc[x->dlugosc]) += 1;
-		(x->dlugosc)++;
-
-	}
-	if ((x->wartosc[(x->dlugosc) - 1] == 0 && x->dlugosc > 1)) {
-		(x->dlugosc)--;
-	}
+void free_container(struct InstrContainer *container) {
+    free(container->instructions);
+    free(container);
 }
 
-//FUNKCJE WYKONUJĄCE SIĘ NA PODSTAWIE INSTRUKCJI
-void INC(zmienna *x) {
-	(x->wartosc[0])++;
-	optymalizuj(x);
+void set_djz_address(struct InstrContainer *container, int djz_own_address, int jumping_address) {
+    container->instructions[djz_own_address].second_arg = jumping_address;
 }
 
-void ADD(zmienna *x, struct zmienna *y) {
-	if ((y->dlugosc) > (x->dlugosc_calkowita)) {
-		(x->dlugosc) = (y->dlugosc);
-		zmien_rozmiar(x, y);
-
-	}
-	for (int i = 0; i < (y->dlugosc); i++) {
-		// printf("\nDLUGOSC  %d  WARTOSC X  %d  WARTOSC Y  %d  indeks %d ",x->dlugosc,x->wartosc[i],y->wartosc[i],i);
-		(x->wartosc[i]) += (y->wartosc[i]);
-	}
-	(x->dlugosc) = (y->dlugosc);
-	optymalizuj(x);
+void check_resizing(struct InstrContainer *container) {
+    if (container->occupied_space == container->all_space) {
+        container->all_space *= 2;
+        container->instructions = realloc(container->instructions, container->all_space * sizeof(struct Instruction));
+        if (container->instructions == NULL) {
+            exit(420);
+        }
+    }
 }
 
-void CLR(zmienna *x) {
-	free(x->wartosc);
-	init(x);
+size_t add_to_container(struct InstrContainer *container, struct Instruction instr) {
+    check_resizing(container);
+    container->instructions[container->occupied_space] = instr;
+    container->occupied_space++;
+
+    return container->occupied_space - 1;
 }
 
-void DJZ(zmienna *x, int *i) {
-	if (x->wartosc[0] != 0 || x->dlugosc != 1) {
-		(x->wartosc[0])--;
-		optymalizuj(x);
-	} else {
-		(*i) = (int) (parametr_1[*i] - 1);
-	}
+//void print_instructions(struct InstrContainer container) {
+//    printf("COMPILER INSTRUCTIONS:\n");
+//
+//    for (size_t i = 0; i < container.occupied_space; i++) {
+//
+//        struct Instruction current_instr = container.instructions[i];
+//
+//        char instr_type[4];
+//
+//        bool first_arg_occured = true;
+//        bool second_arg_occured = true;
+//
+//        switch (current_instr.instrType) {
+//            case INC:
+//                strncpy(instr_type, "INC\0", 4);
+//                second_arg_occured = false;
+//                break;
+//            case ADD:
+//                strncpy(instr_type, "ADD\0", 4);
+//                break;
+//            case CLR:
+//                strncpy(instr_type, "CLR\0", 4);
+//                second_arg_occured = false;
+//                break;
+//            case JMP:
+//                strncpy(instr_type, "JMP\0", 4);
+//                second_arg_occured = false;
+//                break;
+//            case DJZ:
+//                strncpy(instr_type, "DJZ\0", 4);
+//                break;
+//            case HLT:
+//                strncpy(instr_type, "HLT\0", 4);
+//                first_arg_occured = false;
+//                second_arg_occured = false;
+//                break;
+//            case PRT:
+//                strncpy(instr_type, "PRT\0", 4);
+//                second_arg_occured = false;
+//                break;
+//        }
+//        if (first_arg_occured && second_arg_occured) {
+//            printf("    %ld: %s %d %d\n",
+//                   i,
+//                   instr_type,
+//                   current_instr.first_arg,
+//                   current_instr.second_arg);
+//        } else if (first_arg_occured) {
+//            printf("    %ld: %s %d\n",
+//                   i,
+//                   instr_type,
+//                   current_instr.first_arg);
+//        } else {
+//            printf("    %ld: %s\n",
+//                   i,
+//                   instr_type);
+//        }
+//    }
+//}
+/* Constraints: line has minimal length of 3. [For ex. "(a)" ] */
+bool check_if_can_simplify(const char *line, size_t length) {
+    char letter = line[1];
+    int ind = 2;
+
+    for (size_t i = 2; i < length && line[i] != ')'; i++) {
+        if (line[ind] == '(' || line[ind] == letter)
+            return false;
+        ind++;
+    }
+    return true;
 }
 
-void TXT(zmienna x) {
-	printf("%d", x.wartosc[x.dlugosc - 1]);
-	for (int i = x.dlugosc - 2; i >= 0; i--) {
-		if (x.wartosc[i] < 10) {
-			printf("000%d", x.wartosc[i]);
-		} else if (x.wartosc[i] < 100) {
-			printf("00%d", x.wartosc[i]);
-		} else if (x.wartosc[i] < 1000) {
-			printf("0%d", x.wartosc[i]);
-		} else
-			printf("%d", x.wartosc[i]);
-	}
-	printf("\n");
-}
-/*
-1:  INC
-2:  ADD
-3:  CLR
-4:  DJZ
-5:  JMP
-6:  TXT
-7:  HLT
-*/
-void petla(char tab_znakow[], int *i, int *j) {
-	(*i)++;
-	int pom = (*i);
-	(*i)++;
-	int pom2 = (*i);
-	int czy_optymalizowac = 1;
-	int adres;
+size_t find_length_of_loop(const char *loop_str, size_t max_length) {
+    int open_brackets_count = 0;
+    int close_brackets_count = 0;
 
-	while (tab_znakow[pom2] != ')') {
-		if (tab_znakow[pom2] == tab_znakow[pom] || tab_znakow[pom2] == '(') {
-			czy_optymalizowac = 0;
-
-		}
-		pom2++;
-	}
-	if (czy_optymalizowac) {
-		while (tab_znakow[*i] != ')') {
-			nazwa[*j] = 2;
-			parametr_0[*j] = (int) tab_znakow[*i];
-			parametr_1[*j] = (int) tab_znakow[pom];
-			(*j)++;
-			(*i)++;
-		}
-		nazwa[*j] = 3;
-		parametr_0[*j] = (int) tab_znakow[pom];
-		parametr_1[*j] = -1;
-		(*j)++;
-	} else {
-
-		nazwa[*j] = 4;
-		parametr_0[*j] = (int) tab_znakow[pom];
-		parametr_1[*j] = -1;
-		adres = (*j);
-		(*j)++;
-
-		while (tab_znakow[*i] != ')') {
-
-			if (tab_znakow[*i] == '(') {
-				petla(tab_znakow, i, j);
-			} else if (tab_znakow[*i] != '(' && tab_znakow[*i] != ')') {
-				nazwa[*j] = 1;
-				parametr_0[*j] = (int) tab_znakow[*i];
-				parametr_1[*j] = -1;
-				(*j)++;
-				(*i)++;
-			}
-		}
-		nazwa[*j] = 5;
-		parametr_0[*j] = adres;
-		parametr_1[*j] = -1;
-		parametr_1[adres] = (*j) +
-		                    1; //przekazanie wartości komórki j+1 dla instrukcji opcja 4
-		(*j)++;
-	}
-
-	(*i)++;
+    size_t i = 0;
+    while (i < max_length) {
+        if (loop_str[i] == '(') {
+            open_brackets_count++;
+        } else if (loop_str[i] == ')') {
+            close_brackets_count++;
+        }
+        if (open_brackets_count == close_brackets_count) {
+            return i + 1;
+        }
+        i++;
+    }
+    return 0;
 }
 
-/*
-FUNKCJA TWORZĄCA INSTRUKCJE NA PODSTAWIE KODU PODANEGO Z PLIKU WEJŚCIOWEGO, WSZYSTKIE INSTRUKCJE WRZUCA DO TABLIC
-*/
-void wypisz_instrukcje(char tab_znakow[], int dlugosc_tab) {
-	int i = 0;
-	int j = 0;
-	while (i < dlugosc_tab) {
-		if (tab_znakow[i] == '=') {
-			nazwa[j] = 6;
-			parametr_0[j] = (int) tab_znakow[i + 1];
-			parametr_1[j] = -1;
-			i++;
-			j++;
-		} else if (tab_znakow[i] == '(') {
-			petla(tab_znakow, &i, &j);
-			i--;
-		} else if (tab_znakow[i] == '\n') {
-			break;
-		} else {
-			nazwa[j] = 1;
-			parametr_0[j] = (int) tab_znakow[i];
-			parametr_1[j] = -1;
-			j++;
-		}
-		i++;
-	}
-	nazwa[j] = 7;
-	parametr_0[j] = -1;
-	parametr_1[j] = -1;
+/* Constraints: line has minimal length of 3. [For ex. "(a)" ] */
+size_t parse_simplified_loop(struct InstrContainer *container, const char *line, size_t length) {
 
+    size_t ind = 2;
+    int arg1 = (int) line[1];
+    size_t instr_counter = 0;
+
+    while (ind < length && line[ind] != ')') {
+        struct Instruction add_instruction = {ADD, line[ind], arg1};
+        add_to_container(container, add_instruction);
+        instr_counter++;
+        ind++;
+    }
+
+    struct Instruction clear_instruction = {CLR, arg1, 0};
+    add_to_container(container, clear_instruction);
+    instr_counter++;
+    ind++;
+
+    return instr_counter;
 }
 
-/*
-FUNKCJA WYKONUJĄCA POSZCZEGÓLNE OPERACJE NA ZMIENNYCH A-Z, NA PODSTAWIE INSTRUKCJI
-*/
-void wykonaj(zmienna *tab) {
-	// INC '1'
-	// ADD '2'
-	// CLR '3'
-	// DJZ '4'
-	// JMP '5'
-	// TXT '6'
-	// HLT '7'
+size_t parse_loop(struct InstrContainer *container, char *line, size_t length) {
+    if (length < 3) {
+        return 0;
+    }
 
-	int i = 0;
+    if (check_if_can_simplify(line, length)) {
+        return parse_simplified_loop(container, line, length);
+    }
 
+    size_t instructions_counter = 0;
+    int arg1 = (int) line[1];
 
-	while (nazwa[i] != 7) {
-		switch (nazwa[i]) {
-			case 1: {
+    struct Instruction djz_instruction = {DJZ, arg1, 0};
+    size_t djz_address = add_to_container(container, djz_instruction);
+    instructions_counter++;
 
-				INC(&tab[parametr_0[i] - 97]);
-				break;
-			}
-			case 2: {
-				ADD(&tab[parametr_0[i] - 97], &tab[parametr_1[i] - 97]);
-				break;
-			}
-			case 3: {
+    size_t ind = 2;
+    while (ind < length && line[ind] != ')') {
+        if (line[ind] == '(') {
 
-				CLR(&tab[parametr_0[i] - 97]);
-				break;
-			}
-			case 4: {
-				DJZ(&tab[parametr_0[i] - 97], &i);
-				break;
-			}
-			case 5: {
-				i = parametr_0[i] - 1;
-				break;
-			}
-			case 6: {
-				TXT(tab[parametr_0[i] - 97]);
-				break;
-			}
+            size_t loop_length = find_length_of_loop(line + ind, length - ind);
+            size_t loop_instr_counter = parse_loop(container, line + ind, loop_length);
+            instructions_counter += loop_instr_counter;
+            ind += loop_length;
 
-		}
-		i++;
-	}
+        } else if (is_alphabetic(line[ind])) {
 
+            struct Instruction add_instruction = {INC, line[ind], 0};
+            add_to_container(container, add_instruction);
+            instructions_counter++;
+            ind++;
+
+        }
+    }
+
+    struct Instruction jmp_instruction = {JMP, (int) djz_address, 0};
+    add_to_container(container, jmp_instruction);
+    instructions_counter++;
+
+    set_djz_address(container, (int) djz_address,  (int) (djz_address + instructions_counter));
+
+    return instructions_counter;
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
+void parse_line(struct InstrContainer *container, char *line, size_t length) {
+    char first_letter = line[0];
+
+    if (first_letter == '\n') {
+        return;
+    }
+
+    if (first_letter == '=') {
+        struct Instruction new_instruction = {PRT, line[1], 0};
+        add_to_container(container, new_instruction);
+        return;
+    }
+
+    size_t ind = 0;
+    while (ind < length) {
+        char current_letter = line[ind];
+        if (is_alphabetic(current_letter)) {
+
+            struct Instruction new_instruction = {INC, current_letter, 0};
+            add_to_container(container, new_instruction);
+            ind++;
+
+        } else if (current_letter == '(') {
+
+            size_t loop_length = find_length_of_loop(line + ind, length - ind);
+            parse_loop(container, line + ind, loop_length);
+            ind += loop_length;
+
+        } else {
+            ind++;
+        }
+    }
+}
+
+void parse_data(struct InstrContainer *container) {
+    char *line = NULL;
+    size_t len = 0;
+    size_t length_read;
+
+    while ((length_read = getline(&line, &len, stdin)) != -1) {
+        parse_line(container, line, length_read);
+    }
+
+    free(line);
+
+    struct Instruction quit_instruction = {HLT, 0, 0};
+    add_to_container(container, quit_instruction);
+
+//    print_instructions(*container);
+}
+
+void check_letter_size(struct SuperLetter *letter, size_t desired_size) {
+
+    if (letter->occupied_space == letter->free_space) {
+        letter->free_space *= 2;
+        letter->value = realloc(letter->value, letter->free_space * sizeof(int));
+        if (letter->value == NULL) {
+            exit(1);
+        }
+        memset(letter->value + letter->occupied_space, 0, (letter->free_space - letter->occupied_space) * sizeof(int));
+    }
+
+    while (letter->free_space <= desired_size) {
+        letter->free_space *= 2;
+        letter->value = realloc(letter->value, letter->free_space * sizeof(int));
+        if (letter->value == NULL) {
+            exit(1);
+        }
+        memset(letter->value + letter->occupied_space, 0, (letter->free_space - letter->occupied_space) * sizeof(int));
+    }
+}
+
+void safe_inc(struct SuperLetter *letter) {
+    int ind = 0;
+
+    check_letter_size(letter, 0);
+
+    letter->value[ind]++;
+
+    while (letter->value[ind] >= 1000000) {
+        letter->value[ind] %= 1000000;
+        ind++;
+        letter->value[ind] += 1;
+    }
+    if (letter->occupied_space < ind + 1) {
+        letter->occupied_space = ind + 1;
+    }
+}
+
+void safe_add(struct SuperLetter *letter1, struct SuperLetter *letter2) {
+    size_t bigger_size = letter1->occupied_space;
+    if (bigger_size < letter2->occupied_space) {
+        bigger_size = letter2->occupied_space;
+    }
+    check_letter_size(letter1, bigger_size);
+
+    int ind = 0;
+    int following = 0;
+    while (ind < bigger_size) {
+        letter1->value[ind] += letter2->value[ind] + following;
+        if (letter1->value[ind] >= 1000000) {
+            letter1->value[ind] %= 1000000;
+            following = 1;
+        } else {
+            following = 0;
+        }
+        ind++;
+    }
+
+    letter1->occupied_space = bigger_size;
+
+    if (following == 1) {
+        letter1->value[ind] = 1;
+        letter1->occupied_space++;
+    }
+}
+
+void safe_clear(struct SuperLetter *letter) {
+    check_letter_size(letter, 0);
+    int ind = 0;
+    while (ind < letter->occupied_space) {
+        letter->value[ind] = 0;
+        ind++;
+    }
+    letter->occupied_space = 1;
+}
+
+bool compare_zero(struct SuperLetter *letter) {
+    for (int i = 0; i < letter->occupied_space; i++) {
+        if (letter->value[i] != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool safe_decrement(struct SuperLetter *letter) {
+    if (compare_zero(letter)) {
+        return false;
+    }
+
+    for (int i = 0; i < letter->occupied_space; i++) {
+        if (letter->value[i] == 0) {
+            letter->value[i] = 1000000 - 1;
+        } else {
+            letter->value[i]--;
+            break;
+        }
+    }
+
+    if (letter->occupied_space > 1 && letter->value[letter->occupied_space - 1] == 0) {
+        letter->occupied_space -= 1;
+    }
+
+    return true;
+}
+
+
+int check_trailing_zeros(int n) {
+    int trailing_zeros = 6;
+    while (n != 0) {
+        trailing_zeros--;
+        n /= 10;
+    }
+    return trailing_zeros;
+}
+
+void safe_print(struct SuperLetter *letter) {
+    int occupied = letter->occupied_space;
+
+    printf("%d", letter->value[occupied - 1]);
+
+    for (int i = occupied - 2; i >= 0; i--) {
+        int zeros = check_trailing_zeros(letter->value[i]);
+        for (int j = 0; j < zeros; j++) {
+            printf("0");
+        }
+        if (zeros != 6) {
+            printf("%d", letter->value[i]);
+        }
+    }
+    printf("\n");
+}
+
+void execute_instructions(struct InstrContainer *container, struct SuperAlphabet *superAlphabet) {
+
+    int ind = 0;
+    bool program_end = false;
+    bool should_increment_index = true;
+
+    while (true) {
+        struct Instruction current_instr = container->instructions[ind];
+        switch (current_instr.instrType) {
+
+            case INC: {
+                safe_inc(&superAlphabet->letters[current_instr.first_arg - 97]);
+                break;
+            }
+            case ADD: {
+                safe_add(&superAlphabet->letters[current_instr.first_arg - 97],
+                         &superAlphabet->letters[current_instr.second_arg - 97]);
+                break;
+            }
+            case CLR: {
+                safe_clear(&superAlphabet->letters[current_instr.first_arg - 97]);
+                break;
+            }
+            case JMP: {
+                ind = current_instr.first_arg;
+                should_increment_index = false;
+                break;
+            }
+            case DJZ: {
+                if (!safe_decrement(&superAlphabet->letters[current_instr.first_arg - 97])) {
+                    ind = current_instr.second_arg;
+                    should_increment_index = false;
+                }
+                break;
+            }
+            case HLT: {
+                program_end = true;
+                break;
+            }
+            case PRT: {
+                safe_print(&superAlphabet->letters[current_instr.first_arg - 97]);
+                break;
+            }
+        }
+
+        if (program_end) {
+            break;
+        }
+
+        if (should_increment_index) {
+            ind++;
+        }
+        should_increment_index = true;
+    }
+}
+
+
 int main() {
 
-	struct zmienna *tab = malloc(sizeof(struct zmienna) * 26);
-	char *tab_znakow;
-	int dlugosc_tab;
-	int dlugosc_calkowita_tab;
-	int licznik = 0;
+    struct InstrContainer *container = init_container();
+    struct SuperAlphabet *alphabet = init_alphabet();
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//INICJALIZACJA TABLIC
-	for (int i = 0; i < 26; i++) {
-		init(&tab[i]);
-	}
+    parse_data(container);
 
-	init_2(&tab_znakow, &dlugosc_tab, &dlugosc_calkowita_tab);
-///////////////////////////////////////////////////////////////////////////////////////////
-//WRZUCENIE ZNAKÓW DO TABLICY ZNAKÓW
+    execute_instructions(container, alphabet);
 
-	while (scanf("%c", &tab_znakow[licznik]) == 1) {
-		licznik++;
-		dlugosc_tab++;
-		if (dlugosc_tab == dlugosc_calkowita_tab) {
-			zwieksz_rozmiar(&tab_znakow, &dlugosc_tab, &dlugosc_calkowita_tab);
-		}
+    free_alphabet(alphabet);
+    free_container(container);
 
-		if (tab_znakow[licznik - 1] == '\n') {
-			licznik--;
-			dlugosc_tab--;
-		}
-
-	}
-	//printf("%dASDSADKLKAS", tab[0].dlugosc);
-///////////////////////////////////////////////////////////////////////////////////////////
-
-	wypisz_instrukcje(tab_znakow, dlugosc_tab);
-	wykonaj(tab);
-
-
-
-
-	//printf("%d", tab[2].dlugosc);
-///////////////////////////////////////////////////////////////////////////////////////////
-//ZWOLNIENIE PAMIĘCI
-	for (int i = 0; i < 26; i++) {
-		uninit(tab[i]);
-	}
-	free(tab);
-	free(tab_znakow);
+    return 0;
 }
